@@ -1,0 +1,2 @@
+asset,n_train,n_train_pos,train_pos_ratio,n_test,n_test_pos,test_pos_ratio,feature_importance,accuracy,auc,precision,recall,f1
+his,767,224,0.2920469361147327,396,123,0.3106060606060606,"[('VOL_5D_SD', 18), ('log return', 12), ('VOL_5D', 11), ('VOL2_5D_SD', 9), ('VOL2_5D', 8), ('VOL2_20D_SD', 6), ('VOL_20D_SD', 5), ('PX_LAST', 3), ('VOL_20D', 3), ('VOL2_20D', 2), ('VOLATILITY_10D', 1)]",0.696969696969697,0.716817058280473,0.5130434782608696,0.4796747967479675,0.49579831932773116
