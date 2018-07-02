@@ -24,8 +24,8 @@ batch_size = 128
 
 
 def main():
-    n_split = 3
-    asset = 'his'
+    n_split = 5
+    asset = 'hsi'
     d = load_data(asset)
 
     # Classification
@@ -46,14 +46,14 @@ def regression(asset, d, n_split=3):
     n_feature = len(feature_names)
     xs = d.iloc[:, :feature_index]
     # Evaluate labels
-    for label_index in range(4):
+    for label_index in range(1, 5, 1):
         label_column = d.columns[-label_index]
-        ys = d.iloc[:, -label_index]
+        ys = list(d.iloc[:, -label_index])
         train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=1.0/n_split)
         attributes = [label_column, len(train_ys), len(test_ys)]
 
         # Evaluate models
-        for model_name in ['gbdt', 'lr']:
+        for model_name in ['gbdt', 'lr', 'rnn']:
             if model_name == 'gbdt':
                 # Model - xgboost
                 params = get_xgb_regresssion_params()
@@ -116,7 +116,7 @@ def classification(asset, d, n_split=3):
     xs = d.iloc[:, :feature_index].values
 
     # Evaluate labels
-    for label_index in range(4):
+    for label_index in range(1, 5, 1):
         label_column = d.columns[-label_index]
         ys = list((d.iloc[:, -label_index] > 0).astype(int))
         train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=1.0/n_split)

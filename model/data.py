@@ -8,10 +8,11 @@ def load_data(target='gold'):
     # Remove date column
     d = d.iloc[:, 1:]
     # Remove empty features or labels
-    d = d[d.notnull().all(axis=0)]
+    d = d[d.notnull().all(axis=1)]
+    print('data', d.shape)
     return d
 
 
 if __name__ == '__main__':
-    d = load_data('his')
-    print(d)
+    d = load_data('hsi')
+    print(d.columns)
