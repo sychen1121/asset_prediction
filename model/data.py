@@ -1,19 +1,14 @@
-import os
 import pandas as pd
 
 
+# column: 1: date, ~: features, last 4: labels
 def load_data(target='gold'):
     file_path = 'data/{}.csv'.format(target)
-    # file_path = os.path.join("../", 'data/{}.csv'.format(target))
     d = pd.read_csv(file_path)
-    d = d.iloc[:, 2:]
-
-    # Clean
-    # for percent_column in ['VOL_5D_SD', 'VOL_20D_SD', 'VOL2_5D_SD', 'VOL2_20D_SD', 'VOL2 5D_SD minus 20D_SD']:
-    #     d[percent_column] = d[percent_column].str.rstrip('%').astype('float') / 100.0
-
-    # Label
-    d.reset_index()
+    # Remove date column
+    d = d.iloc[:, 1:]
+    # Remove empty features or labels
+    d = d[d.notnull().all(axis=0)]
     return d
 
 
