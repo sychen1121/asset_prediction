@@ -82,9 +82,8 @@ def regression(asset, d, n_split=3):
                 model = get_rnn_model(rnn_length, n_feature, target='regression')
                 early_stopping = EarlyStopping(patience=30, monitor='val_loss')
                 history = model.fit(train_xs, train_ys, batch_size=batch_size, epochs=1000, validation_split=1.0 / 3,
-                                    callbacks=[early_stopping], shuffle=True)
-                # best_epoch = np.argmin(history.history['val_loss'])
-                best_epoch = np.argmax(history.history['val_loss'])
+                                    callbacks=[early_stopping], shuffle=False)
+                best_epoch = np.argmin(history.history['val_loss'])
                 model = get_rnn_model(rnn_length, n_feature, target='regression')
                 model.fit(train_xs, train_ys, batch_size=batch_size, epochs=best_epoch)
                 predictions = model.predict(test_xs)
@@ -153,7 +152,7 @@ def classification(asset, d, n_split=3):
                 model = get_rnn_model(rnn_length, n_feature, target='classification')
                 early_stopping = EarlyStopping(patience=30, monitor='val_loss')
                 history = model.fit(train_xs, train_ys, batch_size=batch_size, epochs=1000, validation_split=1.0/3,
-                                    callbacks=[early_stopping], shuffle=True)
+                                    callbacks=[early_stopping], shuffle=False)
                 # best_epoch = np.argmin(history.history['val_loss'])
                 best_epoch = np.argmax(history.history['val_acc'])
                 model = get_rnn_model(rnn_length, n_feature, target='classification')
@@ -222,9 +221,9 @@ def get_rnn_model(length, n_feature, target='regression'):
     regulization = None
     model = Sequential()
     model.add(BatchNormalization(input_shape=(length, n_feature)))
-    model.add(LSTM(20, activation='sigmoid', return_sequences=True, kernel_regularizer=regulization))
+    model.add(LSTM(10, activation='sigmoid', return_sequences=True, kernel_regularizer=regulization))
     model.add(BatchNormalization())
-    model.add(LSTM(int(n_feature / 2), activation='sigmoid', return_sequences=False, kernel_regularizer=regulization))
+    model.add(LSTM(5, activation='sigmoid', return_sequences=False, kernel_regularizer=regulization))
     optimizer = Adam(lr=0.0005)
     # optimizer = SGD(lr=0.005)
     if target == 'regression':
