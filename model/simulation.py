@@ -29,10 +29,13 @@ def main():
     d = load_data(asset)
 
     # Classification
-    classification(asset, d, n_split)
+    # classification(asset, d, n_split)
 
     # Regression
-    regression(asset, d, n_split)
+    # regression(asset, d, n_split)
+
+    # Sequential
+    sequential(asset, d)
 
 
 def regression(asset, d, n_split=3):
@@ -105,7 +108,7 @@ def regression(asset, d, n_split=3):
 def classification(asset, d, n_split=3):
     # Report
     fields = ['label', 'n_train', 'n_train_pos', 'train_pos_ratio', 'n_test', 'n_test_pos', 'test_pos_ratio',
-              'model', 'feature_importance', 'accuracy', 'auc', 'precision', 'recall', 'f1']
+              'model', 'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1']
     results = []
 
     # Data
@@ -174,6 +177,66 @@ def classification(asset, d, n_split=3):
     print(report)
 
 
+def sequential(asset, d):
+    # Regression and Classification
+    results = []
+    fields = ['label', 'n_train', 'n_test', 'accuracy', 'precision', 'recall', 'f1']
+    # Data
+    feature_index = d.shape[1] - 4
+    feature_names = d.columns[:feature_index]
+    n_feature = len(feature_names)
+    n_train = 200
+    n_test = d.shape[0] - n_train
+    decay_ratio = 0.99
+    n_batch_prediction = 2000.0
+    xs = d.iloc[:, :feature_index].values
+
+    # Evaluate labels
+    for label_index in range(1, 5, 1):
+        label_column = d.columns[-label_index]
+        ys_reg = d.iloc[:, -label_index]
+        ys_class = list((d.iloc[:, -label_index] > 0).astype(int))
+        ys = ys_class
+        train_ys, test_ys = ys[:n_train], ys[n_train:]
+
+        predictions = []
+        scores = []
+
+        # Sequential batch simulation
+        for i in range(math.ceil((d.shape[0] - n_train)/n_batch_prediction)):
+            batch_train_index = n_train + n_batch_prediction * i
+            batch_test_index = batch_train_index + n_batch_prediction
+            batch_train_xs, batch_train_ys = xs[:batch_train_index], ys[:batch_train_index]
+            batch_train_weights = get_weights(batch_train_ys, decay_ratio)
+            batch_test_xs, batch_test_ys = xs[batch_train_index:batch_test_index], ys[batch_train_index:batch_test_index]
+
+            params = get_xgb_classification_params()
+            batch_d_train = xgb.DMatrix(batch_train_xs, label=batch_train_ys, feature_names=feature_names, weight=batch_train_weights)
+            batch_d_test = xgb.DMatrix(batch_test_xs, label=batch_test_ys, feature_names=feature_names)
+            history = xgb.cv(params, batch_d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10,
+                             verbose_eval=False)
+            best_round = np.argmin(history['test-logloss-mean'])
+            model = xgb.train(params, batch_d_train, num_boost_round=best_round, verbose_eval=False)
+            batch_scores = model.predict(batch_d_test)
+            batch_predictions = (np.numpy(batch_scores) > 0.5).astype(int)
+            scores += batch_scores
+            predictions += batch_predictions
+
+        performance = evaluate_classification(None, predictions, test_ys)[1:]
+        result = [label_column, n_train, n_test] + performance
+        results.append(result)
+
+    report = pd.DataFrame(results, columns=fields)
+    report.to_csv(get_sequential_file_path(), index=False)
+    return
+
+
+def get_weights(ys, decay_ratio=0.99):
+    weights = reversed([math.pow(decay_ratio, i) for i in range(ys)])
+    return weights
+
+
+
 def generate_classification(pos_ratio, scores):
     top_k = int(pos_ratio * len(scores))
     top_k_score = sorted(scores, reverse=True)[top_k]
@@ -187,7 +250,10 @@ def generate_classification(pos_ratio, scores):
 
 
 def evaluate_classification(scores, predictions, gts):
-    auc = roc_auc_score(gts, scores)
+    if not scores:
+        auc = None
+    else:
+        auc = roc_auc_score(gts, scores)
     acc = accuracy_score(gts, predictions)
     f1 = f1_score(gts, predictions)
     precision = precision_score(gts, predictions)
@@ -278,6 +344,9 @@ def get_regression_file_path(asset):
 def get_classification_file_path(asset):
     return os.path.join('output', '{}_classification.csv'.format(asset))
 
+
+def get_sequential_file_path(asset):
+    return os.path.join('output', '{}_sequential.csv'.format(asset))
 
 if __name__ == '__main__':
     main()
