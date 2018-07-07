@@ -180,15 +180,15 @@ def classification(asset, d, n_split=3):
 def sequential(asset, d):
     # Regression and Classification
     results = []
-    fields = ['label', 'n_train', 'n_test', 'accuracy', 'precision', 'recall', 'f1']
+    fields = ['label', 'n_train', 'n_test', 'auc', 'accuracy', 'precision', 'recall', 'f1']
     # Data
     feature_index = d.shape[1] - 4
     feature_names = d.columns[:feature_index]
     n_feature = len(feature_names)
-    n_train = 200
+    n_train = 800
     n_test = d.shape[0] - n_train
-    decay_ratio = 0.99
-    n_batch_prediction = 2000.0
+    decay_ratio = 0.997
+    n_batch_prediction = 20
     xs = d.iloc[:, :feature_index].values
 
     # Evaluate labels
@@ -203,12 +203,14 @@ def sequential(asset, d):
         scores = []
 
         # Sequential batch simulation
-        for i in range(math.ceil((d.shape[0] - n_train)/n_batch_prediction)):
+        n_batch = int(math.ceil((d.shape[0] - n_train)/float(n_batch_prediction)))
+        for i in range(n_batch):
+            print('Predict batch {}/{}'.format(i + 1, n_batch))
             batch_train_index = n_train + n_batch_prediction * i
             batch_test_index = batch_train_index + n_batch_prediction
-            batch_train_xs, batch_train_ys = xs[:batch_train_index], ys[:batch_train_index]
+            batch_train_xs, batch_train_ys = xs[:batch_train_index, :], ys[:batch_train_index]
             batch_train_weights = get_weights(batch_train_ys, decay_ratio)
-            batch_test_xs, batch_test_ys = xs[batch_train_index:batch_test_index], ys[batch_train_index:batch_test_index]
+            batch_test_xs, batch_test_ys = xs[batch_train_index:batch_test_index, :], ys[batch_train_index:batch_test_index]
 
             params = get_xgb_classification_params()
             batch_d_train = xgb.DMatrix(batch_train_xs, label=batch_train_ys, feature_names=feature_names, weight=batch_train_weights)
@@ -218,23 +220,23 @@ def sequential(asset, d):
             best_round = np.argmin(history['test-logloss-mean'])
             model = xgb.train(params, batch_d_train, num_boost_round=best_round, verbose_eval=False)
             batch_scores = model.predict(batch_d_test)
-            batch_predictions = (np.numpy(batch_scores) > 0.5).astype(int)
-            scores += batch_scores
-            predictions += batch_predictions
+            batch_predictions = (np.array(batch_scores) > 0.5).astype(int)
+            scores += list(batch_scores)
+            predictions += list(batch_predictions)
 
-        performance = evaluate_classification(None, predictions, test_ys)[1:]
+        performance = evaluate_classification(scores, predictions, test_ys)
         result = [label_column, n_train, n_test] + performance
         results.append(result)
 
     report = pd.DataFrame(results, columns=fields)
-    report.to_csv(get_sequential_file_path(), index=False)
+    print(report)
+    report.to_csv(get_sequential_file_path(asset), index=False)
     return
 
 
-def get_weights(ys, decay_ratio=0.99):
-    weights = reversed([math.pow(decay_ratio, i) for i in range(ys)])
+def get_weights(ys, decay_ratio=0.995):
+    weights = list(reversed([math.pow(decay_ratio, i) for i in range(len(ys))]))
     return weights
-
 
 
 def generate_classification(pos_ratio, scores):
@@ -310,10 +312,11 @@ def get_rnn_model(length, n_feature, target='regression'):
 def get_xgb_classification_params():
     params = {
         'max_depth': 2,
-        'min_child_weight': 2,
+        'verbose': 0,
+        'min_child_weight': 3,
         'objective': 'binary:logistic',
         'eval_metric': ['auc', 'logloss'],
-        'verbose': 1
+        'silent': True
     }
     return params
 
@@ -321,9 +324,11 @@ def get_xgb_classification_params():
 def get_xgb_regresssion_params():
     params = {
         'max_depth': 2,
+        'verbose': 0,
+        'min_child_weight': 3,
         'objective': 'reg:linear',
         'eval_metric': ['rmse'],
-        'verbose': 1
+        'silent': True
     }
     return params
 
