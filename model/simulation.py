@@ -6,10 +6,10 @@ from keras.optimizers import Adam, SGD
 from keras.layers import LSTM, Dense, BatchNormalization
 from keras.regularizers import L1L2
 import math
-
 from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
+from itertools import product
 import os
 import pandas as pd
 import numpy as np
@@ -180,53 +180,56 @@ def classification(asset, d, n_split=3):
 def sequential(asset, d):
     # Regression and Classification
     results = []
-    fields = ['label', 'n_train', 'n_test', 'auc', 'accuracy', 'precision', 'recall', 'f1']
+    fields = ['label', 'n_train', 'n_test', 'decay_ratio', 'n_batch_prediction', 'auc', 'accuracy', 'precision', 'recall', 'f1']
     # Data
     feature_index = d.shape[1] - 4
     feature_names = d.columns[:feature_index]
     n_feature = len(feature_names)
-    n_train = 800
+    n_train = 1000
     n_test = d.shape[0] - n_train
-    decay_ratio = 0.997
-    n_batch_prediction = 20
+    decay_ratios = [0.99, 0.995, 0.997, 1]
+    n_batch_predictions = [5, 10, 20, 60, 120, 240, 480]
+    # decay_ratio = 0.997
+    # n_batch_prediction = 20
     xs = d.iloc[:, :feature_index].values
 
     # Evaluate labels
     for label_index in range(1, 5, 1):
-        label_column = d.columns[-label_index]
-        ys_reg = d.iloc[:, -label_index]
-        ys_class = list((d.iloc[:, -label_index] > 0).astype(int))
-        ys = ys_class
-        train_ys, test_ys = ys[:n_train], ys[n_train:]
+        for decay_ratio, n_batch_prediction in product(decay_ratios, n_batch_predictions):
+            label_column = d.columns[-label_index]
+            # ys_reg = d.iloc[:, -label_index]
+            ys_class = list((d.iloc[:, -label_index] > 0).astype(int))
+            ys = ys_class
+            train_ys, test_ys = ys[:n_train], ys[n_train:]
 
-        predictions = []
-        scores = []
+            predictions = []
+            scores = []
 
-        # Sequential batch simulation
-        n_batch = int(math.ceil((d.shape[0] - n_train)/float(n_batch_prediction)))
-        for i in range(n_batch):
-            print('Predict batch {}/{}'.format(i + 1, n_batch))
-            batch_train_index = n_train + n_batch_prediction * i
-            batch_test_index = batch_train_index + n_batch_prediction
-            batch_train_xs, batch_train_ys = xs[:batch_train_index, :], ys[:batch_train_index]
-            batch_train_weights = get_weights(batch_train_ys, decay_ratio)
-            batch_test_xs, batch_test_ys = xs[batch_train_index:batch_test_index, :], ys[batch_train_index:batch_test_index]
+            # Sequential batch simulation
+            n_batch = int(math.ceil((d.shape[0] - n_train)/float(n_batch_prediction)))
+            for i in range(n_batch):
+                print('Predict batch {}/{}'.format(i + 1, n_batch))
+                batch_train_index = n_train + n_batch_prediction * i
+                batch_test_index = batch_train_index + n_batch_prediction
+                batch_train_xs, batch_train_ys = xs[:batch_train_index, :], ys[:batch_train_index]
+                batch_train_weights = get_weights(batch_train_ys, decay_ratio)
+                batch_test_xs, batch_test_ys = xs[batch_train_index:batch_test_index, :], ys[batch_train_index:batch_test_index]
 
-            params = get_xgb_classification_params()
-            batch_d_train = xgb.DMatrix(batch_train_xs, label=batch_train_ys, feature_names=feature_names, weight=batch_train_weights)
-            batch_d_test = xgb.DMatrix(batch_test_xs, label=batch_test_ys, feature_names=feature_names)
-            history = xgb.cv(params, batch_d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10,
-                             verbose_eval=False)
-            best_round = np.argmin(history['test-logloss-mean'])
-            model = xgb.train(params, batch_d_train, num_boost_round=best_round, verbose_eval=False)
-            batch_scores = model.predict(batch_d_test)
-            batch_predictions = (np.array(batch_scores) > 0.5).astype(int)
-            scores += list(batch_scores)
-            predictions += list(batch_predictions)
+                params = get_xgb_classification_params()
+                batch_d_train = xgb.DMatrix(batch_train_xs, label=batch_train_ys, feature_names=feature_names, weight=batch_train_weights)
+                batch_d_test = xgb.DMatrix(batch_test_xs, label=batch_test_ys, feature_names=feature_names)
+                history = xgb.cv(params, batch_d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10,
+                                 verbose_eval=False)
+                best_round = np.argmin(history['test-logloss-mean'])
+                model = xgb.train(params, batch_d_train, num_boost_round=best_round, verbose_eval=False)
+                batch_scores = model.predict(batch_d_test)
+                batch_predictions = (np.array(batch_scores) > 0.5).astype(int)
+                scores += list(batch_scores)
+                predictions += list(batch_predictions)
 
-        performance = evaluate_classification(scores, predictions, test_ys)
-        result = [label_column, n_train, n_test] + performance
-        results.append(result)
+            performance = evaluate_classification(scores, predictions, test_ys)
+            result = [label_column, n_train, n_test, decay_ratio, n_batch_prediction] + performance
+            results.append(result)
 
     report = pd.DataFrame(results, columns=fields)
     print(report)
