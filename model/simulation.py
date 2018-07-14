@@ -7,7 +7,7 @@ from keras.layers import LSTM, Dense, BatchNormalization
 from keras.regularizers import L1L2
 import math
 from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, log_loss
 from sklearn.preprocessing import StandardScaler
 from itertools import product
 import os
@@ -21,38 +21,39 @@ from data import load_data
 
 rnn_length = 20
 batch_size = 128
+n_label = 3
 
 
 def main():
-    n_split = 5
-    asset = 'hsi'
+    test_size = 200
+    asset = 'hsi3'
     d = load_data(asset)
 
     # Classification
-    # classification(asset, d, n_split)
+    classification(asset, d, test_size)
 
     # Regression
-    # regression(asset, d, n_split)
+    # regression(asset, d, test_size)
 
     # Sequential
-    sequential(asset, d)
+    # sequential(asset, d)
 
 
-def regression(asset, d, n_split=3):
+def regression(asset, d, test_size):
     # Report
-    fields = ['label', 'n_train', 'n_test', 'model', 'feature_importance', 'rmse']
+    fields = ['label', 'n_train', 'n_test', 'model', 'train_loss', 'feature_importance', 'rmse']
     results = []
 
     # Data
-    feature_index = d.shape[1] - 4
+    feature_index = d.shape[1] - n_label
     feature_names = d.columns[:feature_index]
     n_feature = len(feature_names)
     xs = d.iloc[:, :feature_index]
     # Evaluate labels
-    for label_index in range(1, 5, 1):
+    for label_index in range(1, n_label + 1, 1):
         label_column = d.columns[-label_index]
         ys = list(d.iloc[:, -label_index])
-        train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=1.0/n_split)
+        train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=test_size)
         attributes = [label_column, len(train_ys), len(test_ys)]
 
         # Evaluate models
@@ -66,11 +67,15 @@ def regression(asset, d, n_split=3):
                                  verbose_eval=False)
                 best_round = np.argmin(history['test-rmse-mean'])
                 model = xgb.train(params, d_train, num_boost_round=best_round, verbose_eval=False)
+                train_result = model.eval(d_train)
+                train_loss = float(train_result.split(':')[-1])
                 predictions = model.predict(d_test)
                 feature_importance = sorted(model.get_fscore().items(), key=lambda x: x[1], reverse=True)
             elif model_name == 'lr':
                 model = LinearRegression()
                 model.fit(train_xs, train_ys)
+                train_predictions = model.predict(train_xs)
+                train_loss = math.sqrt(mean_squared_error(train_ys, train_predictions))
                 predictions = model.predict(test_xs)
                 feature_importance = None
             elif model_name == 'rnn':
@@ -81,22 +86,23 @@ def regression(asset, d, n_split=3):
 
                 # Data
                 train_xs, test_xs, train_ys, test_ys = train_test_split(sequnce_xs, sequence_ys, shuffle=False,
-                                                                        test_size=1.0 / n_split)
+                                                                        test_size=test_size)
                 model = get_rnn_model(rnn_length, n_feature, target='regression')
                 early_stopping = EarlyStopping(patience=30, monitor='val_loss')
-                history = model.fit(train_xs, train_ys, batch_size=batch_size, epochs=1000, validation_split=1.0 / 3,
+                history = model.fit(train_xs, train_ys, batch_size=batch_size, epochs=1000, validation_split=1.0 / 5,
                                     callbacks=[early_stopping], shuffle=False)
                 best_epoch = np.argmin(history.history['val_loss'])
                 model = get_rnn_model(rnn_length, n_feature, target='regression')
                 model.fit(train_xs, train_ys, batch_size=batch_size, epochs=best_epoch)
+                train_loss = model.evaluate(train_xs, train_ys)[0]
                 predictions = model.predict(test_xs)
                 feature_importance = None
-                print('RNN training history', history.history)
+                # print('RNN training history', history.history)
 
             # Evaluation
             mse = mean_squared_error(test_ys, predictions)
             rmse = math.pow(mse, 0.5)
-            performance = [model_name, feature_importance, rmse]
+            performance = [model_name, train_loss, feature_importance, rmse]
 
             result = attributes + performance
             results.append(result)
@@ -105,23 +111,23 @@ def regression(asset, d, n_split=3):
     print(report)
 
 
-def classification(asset, d, n_split=3):
+def classification(asset, d, test_size=3):
     # Report
     fields = ['label', 'n_train', 'n_train_pos', 'train_pos_ratio', 'n_test', 'n_test_pos', 'test_pos_ratio',
-              'model', 'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1']
+              'model', 'train_loss', 'test_loss', 'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1']
     results = []
 
     # Data
-    feature_index = d.shape[1] - 4
+    feature_index = d.shape[1] - n_label
     feature_names = d.columns[:feature_index]
     n_feature = len(feature_names)
     xs = d.iloc[:, :feature_index].values
 
     # Evaluate labels
-    for label_index in range(1, 5, 1):
+    for label_index in range(1, n_label + 1, 1):
         label_column = d.columns[-label_index]
         ys = list((d.iloc[:, -label_index] > 0).astype(int))
-        train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=1.0/n_split)
+        train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=test_size)
         n_train_pos, n_train, n_test_pos, n_test = sum(train_ys), len(train_ys), sum(test_ys), len(test_ys)
         train_pos_ratio, test_pos_ratio = n_train_pos/float(n_train), n_test_pos/float(n_test)
         attribute = [label_column, n_train, n_train_pos, train_pos_ratio, n_test, n_test_pos, test_pos_ratio]
@@ -137,12 +143,17 @@ def classification(asset, d, n_split=3):
                 history = xgb.cv(params, d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10, verbose_eval=False)
                 best_round = np.argmin(history['test-logloss-mean'])
                 model = xgb.train(params, d_train, num_boost_round=best_round, verbose_eval=False)
-                scores = model.predict(d_test)
+                train_loss = float(model.eval(d_train).split(':')[-1])
+                test_loss = float(model.eval(d_test).split(':')[-1])
+                scores = list(model.predict(d_test))
                 feature_importance = sorted(model.get_fscore().items(), key=lambda x: x[1], reverse=True)
             elif model_name == 'lr':
                 model = LogisticRegression()
                 model.fit(train_xs, train_ys)
-                scores = model.predict_proba(test_xs)[:, 1]
+                train_scores = list(model.predict_proba(train_xs)[:, 1])
+                train_loss = log_loss(train_ys, train_scores)
+                scores = list(model.predict_proba(test_xs)[:, 1])
+                test_loss = log_loss(test_ys, scores)
                 feature_importance = None
             elif model_name == 'rnn':
                 # Normalized by training data
@@ -151,25 +162,28 @@ def classification(asset, d, n_split=3):
                 sequnce_xs, sequence_ys = get_rnn_dataset(norm_xs, ys, rnn_length)
 
                 # Data
-                train_xs, test_xs, train_ys, test_ys = train_test_split(sequnce_xs, sequence_ys, shuffle=False, test_size=1.0/n_split)
+                train_xs, test_xs, train_ys, test_ys = train_test_split(sequnce_xs, sequence_ys, shuffle=True, test_size=test_size)
                 model = get_rnn_model(rnn_length, n_feature, target='classification')
-                early_stopping = EarlyStopping(patience=30, monitor='val_loss')
-                history = model.fit(train_xs, train_ys, batch_size=batch_size, epochs=1000, validation_split=1.0/3,
+                early_stopping = EarlyStopping(patience=50, monitor='val_loss')
+                history = model.fit(train_xs, train_ys, batch_size=batch_size, epochs=1000, validation_split=1.0/5,
                                     callbacks=[early_stopping], shuffle=False)
                 # best_epoch = np.argmin(history.history['val_loss'])
-                best_epoch = np.argmax(history.history['val_acc'])
+                model.predict(train_xs)
+                best_epoch = np.argmin(history.history['val_loss'])
                 model = get_rnn_model(rnn_length, n_feature, target='classification')
                 model.fit(train_xs, train_ys, batch_size=batch_size, epochs=best_epoch)
-                scores = model.predict(test_xs)
+                train_loss = model.evaluate(train_xs, train_ys)[0]
+                test_loss = model.evaluate(test_xs, test_ys)[0]
+                scores = list(model.predict(test_xs))
                 feature_importance = None
-                print('RNN training history', history.history)
+                # print('RNN training history', history.history)
 
             # Predictions
             predictions = generate_classification(train_pos_ratio, scores)
 
             # Report
             performance = evaluate_classification(scores, predictions, test_ys)
-            result = attribute + [model_name, feature_importance] + performance
+            result = attribute + [model_name, train_loss, test_loss, feature_importance] + performance
             results.append(result)
 
     report = pd.DataFrame(results, columns=fields)
@@ -182,7 +196,7 @@ def sequential(asset, d):
     results = []
     fields = ['label', 'n_train', 'n_test', 'decay_ratio', 'n_batch_prediction', 'auc', 'accuracy', 'precision', 'recall', 'f1']
     # Data
-    feature_index = d.shape[1] - 4
+    feature_index = d.shape[1] - n_label
     feature_names = d.columns[:feature_index]
     n_feature = len(feature_names)
     n_train = 1000
@@ -194,7 +208,7 @@ def sequential(asset, d):
     xs = d.iloc[:, :feature_index].values
 
     # Evaluate labels
-    for label_index in range(1, 5, 1):
+    for label_index in range(1, n_label + 1, 1):
         for decay_ratio, n_batch_prediction in product(decay_ratios, n_batch_predictions):
             label_column = d.columns[-label_index]
             # ys_reg = d.iloc[:, -label_index]
