@@ -1,5 +1,7 @@
+__
 output
 src
+*.log
 nohup.out
 .DS_Store
 .idea

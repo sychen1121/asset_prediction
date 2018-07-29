@@ -11,6 +11,7 @@ from sklearn.metrics import mean_squared_error, log_loss
 from sklearn.preprocessing import StandardScaler
 from itertools import product
 import os
+import copy
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -33,10 +34,10 @@ def main():
     classification(asset, d, test_size)
 
     # Regression
-    # regression(asset, d, test_size)
+    regression(asset, d, test_size)
 
     # Sequential
-    # sequential(asset, d)
+    sequential(asset, d, test_size)
 
 
 def regression(asset, d, test_size):
@@ -60,13 +61,11 @@ def regression(asset, d, test_size):
         for model_name in ['gbdt', 'lr', 'rnn']:
             if model_name == 'gbdt':
                 # Model - xgboost
-                params = get_xgb_regresssion_params()
+                params = get_xgb_regression_params()
                 d_train = xgb.DMatrix(train_xs, label=train_ys, feature_names=feature_names)
                 d_test = xgb.DMatrix(test_xs, label=test_ys, feature_names=feature_names)
-                history = xgb.cv(params, d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10,
-                                 verbose_eval=False)
-                best_round = np.argmin(history['test-rmse-mean'])
-                model = xgb.train(params, d_train, num_boost_round=best_round, verbose_eval=False)
+                best_param, best_round = xgb_param_selection(params, d_train, target='test-rmse-mean')
+                model = xgb.train(best_param, d_train, num_boost_round=best_round, verbose_eval=False)
                 train_result = model.eval(d_train)
                 train_loss = float(train_result.split(':')[-1])
                 predictions = model.predict(d_test)
@@ -111,7 +110,7 @@ def regression(asset, d, test_size):
     print(report)
 
 
-def classification(asset, d, test_size=3):
+def classification(asset, d, test_size=200):
     # Report
     fields = ['label', 'n_train', 'n_train_pos', 'train_pos_ratio', 'n_test', 'n_test_pos', 'test_pos_ratio',
               'model', 'train_loss', 'test_loss', 'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1']
@@ -140,9 +139,8 @@ def classification(asset, d, test_size=3):
                 params = get_xgb_classification_params()
                 d_train = xgb.DMatrix(train_xs, label=train_ys, feature_names=feature_names)
                 d_test = xgb.DMatrix(test_xs, label=test_ys, feature_names=feature_names)
-                history = xgb.cv(params, d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10, verbose_eval=False)
-                best_round = np.argmin(history['test-logloss-mean'])
-                model = xgb.train(params, d_train, num_boost_round=best_round, verbose_eval=False)
+                best_param, best_round = xgb_param_selection(params, d_train, target='test-logloss-mean')
+                model = xgb.train(best_param, d_train, num_boost_round=best_round, verbose_eval=False)
                 train_loss = float(model.eval(d_train).split(':')[-1])
                 test_loss = float(model.eval(d_test).split(':')[-1])
                 scores = list(model.predict(d_test))
@@ -191,7 +189,7 @@ def classification(asset, d, test_size=3):
     print(report)
 
 
-def sequential(asset, d):
+def sequential(asset, d, test_size=200):
     # Regression and Classification
     results = []
     fields = ['label', 'n_train', 'n_test', 'decay_ratio', 'n_batch_prediction', 'auc', 'accuracy', 'precision', 'recall', 'f1']
@@ -199,8 +197,8 @@ def sequential(asset, d):
     feature_index = d.shape[1] - n_label
     feature_names = d.columns[:feature_index]
     n_feature = len(feature_names)
-    n_train = 1000
-    n_test = d.shape[0] - n_train
+    n_train = d.shape[0] - test_size
+    n_test = test_size
     decay_ratios = [0.99, 0.995, 0.997, 1]
     n_batch_predictions = [5, 10, 20, 60, 120, 240, 480]
     # decay_ratio = 0.997
@@ -220,7 +218,7 @@ def sequential(asset, d):
             scores = []
 
             # Sequential batch simulation
-            n_batch = int(math.ceil((d.shape[0] - n_train)/float(n_batch_prediction)))
+            n_batch = int(math.ceil(test_size/float(n_batch_prediction)))
             for i in range(n_batch):
                 print('Predict batch {}/{}'.format(i + 1, n_batch))
                 batch_train_index = n_train + n_batch_prediction * i
@@ -232,10 +230,9 @@ def sequential(asset, d):
                 params = get_xgb_classification_params()
                 batch_d_train = xgb.DMatrix(batch_train_xs, label=batch_train_ys, feature_names=feature_names, weight=batch_train_weights)
                 batch_d_test = xgb.DMatrix(batch_test_xs, label=batch_test_ys, feature_names=feature_names)
-                history = xgb.cv(params, batch_d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10,
-                                 verbose_eval=False)
-                best_round = np.argmin(history['test-logloss-mean'])
-                model = xgb.train(params, batch_d_train, num_boost_round=best_round, verbose_eval=False)
+                best_param, best_round = xgb_param_selection(params, batch_d_train, target='test-logloss-mean')
+
+                model = xgb.train(best_param, batch_d_train, num_boost_round=best_round, verbose_eval=False)
                 batch_scores = model.predict(batch_d_test)
                 batch_predictions = (np.array(batch_scores) > 0.5).astype(int)
                 scores += list(batch_scores)
@@ -249,6 +246,26 @@ def sequential(asset, d):
     print(report)
     report.to_csv(get_sequential_file_path(asset), index=False)
     return
+
+
+def xgb_param_selection(params, d_train, target='test-logloss-mean'):
+    best_param = None
+    best_round = None
+    best_loss = None
+    ls = []
+    for param in params:
+        history = xgb.cv(param, d_train, num_boost_round=100, nfold=5, early_stopping_rounds=10, verbose_eval=False)
+        param_best_loss = min(history[target])
+        param_best_round = np.argmin(history[target])
+        ls.append(param_best_loss)
+        if best_loss and best_loss < param_best_loss:
+            continue
+        best_param = param
+        best_round = param_best_round
+        best_loss = param_best_loss
+
+    print('xgb param selection loss: {} from {}, param: {}'.format(best_loss, ls, best_param))
+    return best_param, best_round
 
 
 def get_weights(ys, decay_ratio=0.995):
@@ -327,26 +344,36 @@ def get_rnn_model(length, n_feature, target='regression'):
 # XGBoost
 ###############
 def get_xgb_classification_params():
-    params = {
-        'max_depth': 2,
+    max_depths = [1, 2, 5, 10, 30]
+    min_childs = [2, 3, 5, 10]
+    param = {
         'verbose': 0,
-        'min_child_weight': 3,
         'objective': 'binary:logistic',
         'eval_metric': ['auc', 'logloss'],
         'silent': True
     }
+    params = []
+    for max_depth, min_child in product(max_depths, min_childs):
+        p = copy.deepcopy(param)
+        p.update({'max_depth': max_depth, 'min_child_weight': min_child})
+        params.append(p)
     return params
 
 
-def get_xgb_regresssion_params():
-    params = {
-        'max_depth': 2,
+def get_xgb_regression_params():
+    max_depths = [2, 5, 10]
+    min_childs = [2, 3, 5, 10]
+    param = {
         'verbose': 0,
-        'min_child_weight': 3,
         'objective': 'reg:linear',
         'eval_metric': ['rmse'],
         'silent': True
     }
+    params = []
+    for max_depth, min_child in product(max_depths, min_childs):
+        p = copy.deepcopy(param)
+        p.update({'max_depth': max_depth, 'min_child_weight': min_child})
+        params.append(p)
     return params
 
 
