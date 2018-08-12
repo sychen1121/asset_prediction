@@ -12,7 +12,7 @@ predict:
 
 simulate:
 	. __/bin/activate
-	python -m model.simulation
+	python -m app.simulation
 
 reset:
 	. __/bin/activate
