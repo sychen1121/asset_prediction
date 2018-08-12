@@ -15,8 +15,8 @@ simulate:
 	python -m app.simulation
 
 reset:
-	. __/bin/activate
 	rm -rf output/model/*
+	rm -rf output/prediction/*
 
 
 
