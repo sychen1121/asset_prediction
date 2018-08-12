@@ -1,6 +1,7 @@
 __
 src
 *.log
+*.pyc
 nohup.out
 .DS_Store
 .idea
