@@ -1,8 +1,10 @@
 ## Structure
 ```
 data: input
-model: program
-output: evaluation result
+app: program
+output/model: selection result and model file
+output/prediction: prediction result
+output/report: simulation performance
 ```
 
 ## Data format
@@ -17,6 +19,9 @@ output: evaluation result
 make install
 
 ## Run
-make run
+make predict
+
+## Reset model
+make reset
 
 

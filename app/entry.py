@@ -8,7 +8,7 @@ from app.simulation import classification
 
 def load_assets():
     # assets = [os.path.splitext(file_name)[0] for file_name in os.listdir('data/')]
-    assets = ['hsi3', 'CAC40', 'DAX', 'S&P500', 'S&P_TSX']
+    assets = ['HSI', 'CAC40', 'DAX', 'S&P500', 'S&P_TSX']
     return assets
 
 
@@ -25,6 +25,8 @@ def get_prediction(assets=load_assets()):
 
     # Generate prediction
     for _, selection in selections.iterrows():
+        if selection['asset'] not in assets:
+            continue
         generate_prediction(selection)
     return
 
@@ -63,7 +65,7 @@ def save_selection_result(d1, d2):
     if d1 is None:
         d1 = d2
     else:
-        d1 = pd.conat(d1, d2)
+        d1 = pd.concat([d1, d2])
     d1.to_csv(get_selection_file_path(), index=False)
     return d1
 
