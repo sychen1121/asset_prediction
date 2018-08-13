@@ -107,7 +107,7 @@ def regression(asset, d, test_size):
     print(report)
 
 
-def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], save_model=False):
+def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], is_production=False):
     fields = ['asset', 'label', 'n_train', 'n_train_pos', 'n_test', 'n_test_pos', 'model_name', 'train_loss',
               'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1']
 
@@ -136,12 +136,12 @@ def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], s
         result.update({'feature_importance': feature_importance, 'model_name': model_name})
         results.append(result)
     report = pd.DataFrame(results, columns=fields)
-    report.to_csv(get_classification_file_path(asset), index=False)
+    report.to_csv(get_classification_file_path(asset, is_production), index=False)
 
     # Selection
     index = np.argmax(aucs)
     best_performance = report.iloc[index, :]
-    if save_model:
+    if is_production:
         model_name = model_names[index]
         model_path = get_model_file_path(asset, model_name)
         models[index].save_model(model_path)
@@ -229,16 +229,29 @@ def evaluate_classification(scores, predictions, gts):
 ###############
 # IO
 ###############
-def get_regression_file_path(asset):
-    return os.path.join('output/report', '{}_regression.csv'.format(asset))
+def get_regression_file_path(asset, is_production=False):
+    if is_production:
+        path = 'output/report'
+    else:
+        path = 'output/exp'
+    return os.path.join(path, '{}_regression.csv'.format(asset))
 
 
-def get_classification_file_path(asset):
-    return os.path.join('output/report', '{}_classification.csv'.format(asset))
+def get_classification_file_path(asset, is_production=False):
+    if is_production:
+        path = 'output/report'
+    else:
+        path = 'output/exp'
+    return os.path.join(path, '{}_classification.csv'.format(asset))
 
 
-def get_sequential_file_path(asset):
-    return os.path.join('output/report', '{}_sequential.csv'.format(asset))
+def get_sequential_file_path(asset, is_production=False):
+    if is_production:
+        path = 'output/report'
+    else:
+        path = 'output/exp'
+    return os.path.join(path, '{}_sequential.csv'.format(asset))
+
 
 
 if __name__ == '__main__':

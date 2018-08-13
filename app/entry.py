@@ -35,7 +35,7 @@ def generate_model(assets):
     best_performances = []
     for asset in assets:
         d = load_data(asset)
-        best_performances.append(classification(asset, d, save_model=True))
+        best_performances.append(classification(asset, d, is_production=True))
     return pd.DataFrame(best_performances)
 
 
