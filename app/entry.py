@@ -40,7 +40,8 @@ def generate_model(assets):
 
 
 def generate_prediction(selection):
-    asset, model_name, model_path = selection['asset'], selection['model_name'], selection['model_path']
+    asset, model_name, model_path, threshold = selection['asset'], selection['model_name'], \
+                                               selection['model_path'], selection['threshold']
 
     # Load data
     data = load_data(asset).iloc[-30:, :]
@@ -51,7 +52,7 @@ def generate_prediction(selection):
     model.load_model(model_path)
 
     # Generate prediction
-    scores, predictions = model.predict(xs)
+    scores, predictions = model.predict(xs, threshold)
     result = load_prediction_result(asset)
     new_result = pd.DataFrame([[data.index[-1], scores[-1], predictions[-1]]], columns=['date', 'score', 'prediction'])
     save_prediction_result(asset, result, new_result)
