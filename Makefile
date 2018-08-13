@@ -6,6 +6,10 @@ install:
 	mkdir -r output/report
 	mkdir -r output/result
 
+update:
+	. __/bin/activate
+	pip install --user -r requirements.txt
+
 predict:
 	. __/bin/activate
 	python -m app.entry
