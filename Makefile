@@ -17,6 +17,7 @@ simulate:
 reset:
 	rm -rf output/model/*
 	rm -rf output/prediction/*
+	rm -rf output/report/*
 
 
 
