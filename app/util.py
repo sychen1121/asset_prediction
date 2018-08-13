@@ -15,3 +15,4 @@ def get_precision_recall_curve(ys, scores, file_path):
     plt.xlim([0.0, 1.0])
     plt.title('Precision-Recall Curve: AP={0:0.2f}'.format(average_precision))
     plt.savefig(file_path)
+    plt.clf()
