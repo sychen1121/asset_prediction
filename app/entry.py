@@ -31,7 +31,7 @@ def generate_model(targets):
     best_performances = []
     for asset, label_index in targets:
         d = load_data(asset, is_prediction=False)
-        best_performances.append(classification(asset, d, label_index=label_index, is_production=True))
+        best_performances.append(classification(asset, d, model_names=['gbdt', 'lr', 'rnn'], label_index=label_index, is_production=True))
     return pd.DataFrame(best_performances)
 
 

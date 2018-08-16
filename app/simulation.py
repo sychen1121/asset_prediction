@@ -126,7 +126,10 @@ def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], l
         models.append(model)
         status = model.train(train_xs, train_ys)
         feature_importance = model.get_feature_importance()
-        threshold = search_threshold(train_xs, train_ys, model)
+        threshold = search_threshold(train_xs, train_ys, model, valid_size=test_size)
+        scores, predictions = model.predict(test_xs)
+        print('threshold', threshold, 'avg_score', np.average(scores))
+        # print(sorted(list(zip(scores, test_ys)), reverse=True))
         performance = model.test(test_xs, test_ys, threshold)
         aucs.append(performance['auc'])
 
