@@ -67,8 +67,8 @@ class Model(object):
     def get_feature_importance(self):
         return None
 
-    def save_pr_curve(self, asset, xs, ys):
-        output_path = get_pr_curve_file_path(asset, self.name)
+    def save_pr_curve(self, asset, label_name, xs, ys):
+        output_path = get_pr_curve_file_path(asset, label_name, self.name)
         scores, _ = self.predict(xs)
         if self.name == 'rnn':
             ys = ys[self.rnn_length-1:]
@@ -280,10 +280,10 @@ def get_rnn_data(xs, ys, length=20):
 ###############
 # IO
 ###############
-def get_model_file_path(asset, model_name):
-    return os.path.join('output/model', '{}_{}.model'.format(asset, model_name))
+def get_model_file_path(asset, label_name, model_name):
+    return os.path.join('output/model', '{}_{}_{}.model'.format(asset, label_name, model_name))
 
 
-def get_pr_curve_file_path(asset, model_name):
+def get_pr_curve_file_path(asset, label_name, model_name):
     path = 'output/report'
-    return os.path.join(path, '{}_{}_pr_curve.png'.format(asset, model_name))
+    return os.path.join(path, '{}_{}_{}_pr_curve.png'.format(asset, label_name, model_name))

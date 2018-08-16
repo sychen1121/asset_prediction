@@ -25,7 +25,7 @@ n_label = 3
 def main():
     test_size = 200
     asset = 'hsi3'
-    d = load_data(asset)
+    d = load_data(asset, is_prediction=False)
 
     # Classification
     classification(asset, d, test_size)
@@ -49,10 +49,10 @@ def regression(asset, d, test_size):
     xs = d.iloc[:, :feature_index]
     # Evaluate labels
     for label_index in range(1, n_label + 1, 1):
-        label_column = d.columns[-label_index]
+        label_name = d.columns[-label_index]
         ys = list(d.iloc[:, -label_index])
         train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=test_size)
-        attributes = [label_column, len(train_ys), len(test_ys)]
+        attributes = [label_name, len(train_ys), len(test_ys)]
 
         # Evaluate models
         for model_name in ['gbdt', 'lr', 'rnn']:
@@ -107,15 +107,15 @@ def regression(asset, d, test_size):
     print(report)
 
 
-def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], is_production=False):
-    fields = ['asset', 'label', 'n_train', 'n_train_pos', 'n_test', 'n_test_pos', 'model_name', 'train_loss',
+def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], label_index=-1, is_production=False):
+    fields = ['asset', 'label', 'label_index', 'n_train', 'n_train_pos', 'n_test', 'n_test_pos', 'model_name', 'train_loss',
               'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1', 'threshold']
     default_threshold = 0.5
     # Data
-    xs, ys, feature_names, label_column = get_classification_data(d)
+    xs, ys, feature_names, label_name = get_classification_data(d, label_index)
     train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=test_size)
     n_train_pos, n_train, n_test_pos, n_test = sum(train_ys), len(train_ys), sum(test_ys), len(test_ys)
-    attributes = {'asset': asset, 'label': label_column, 'n_train': n_train, 'n_train_pos': n_train_pos,
+    attributes = {'asset': asset, 'label': label_name, 'label_index': label_index, 'n_train': n_train, 'n_train_pos': n_train_pos,
                   'n_test': n_test, 'n_test_pos': n_test_pos, 'threshold': default_threshold}
 
     # Model
@@ -136,17 +136,17 @@ def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], i
         result.update({'feature_importance': feature_importance, 'model_name': model_name})
         results.append(result)
     report = pd.DataFrame(results, columns=fields)
-    report.to_csv(get_classification_file_path(asset, is_production), index=False)
+    report.to_csv(get_classification_file_path(asset, label_name, is_production), index=False)
 
     # Selection
     index = np.argmax(aucs)
     best_performance = report.iloc[index, :]
     if is_production:
         model_name = model_names[index]
-        model_path = get_model_file_path(asset, model_name)
+        model_path = get_model_file_path(asset, label_name, model_name)
         model = models[index]
         model.save_model(model_path)
-        model.save_pr_curve(asset, test_xs, test_ys)
+        model.save_pr_curve(asset, label_name, test_xs, test_ys)
         best_performance['model_path'] = model_path
     return best_performance
 
@@ -170,7 +170,7 @@ def sequential(asset, d, test_size=200):
     # Evaluate labels
     for label_index in range(1, n_label + 1, 1):
         for decay_ratio, n_batch_prediction in product(decay_ratios, n_batch_predictions):
-            label_column = d.columns[-label_index]
+            label_name = d.columns[-label_index]
             # ys_reg = d.iloc[:, -label_index]
             ys_class = list((d.iloc[:, -label_index] > 0).astype(int))
             ys = ys_class
@@ -203,7 +203,7 @@ def sequential(asset, d, test_size=200):
                 predictions += list(batch_predictions)
 
             performance = evaluate_classification(scores, predictions, test_ys)
-            result = [label_column, n_train, n_test, decay_ratio, n_batch_prediction] + performance
+            result = [label_name, n_train, n_test, decay_ratio, n_batch_prediction] + performance
             results.append(result)
 
     report = pd.DataFrame(results, columns=fields)
@@ -239,12 +239,12 @@ def get_regression_file_path(asset, is_production=False):
     return os.path.join(path, '{}_regression.csv'.format(asset))
 
 
-def get_classification_file_path(asset, is_production=False):
+def get_classification_file_path(asset, label_name, is_production=False):
     if is_production:
         path = 'output/report'
     else:
         path = 'output/exp'
-    return os.path.join(path, '{}_classification.csv'.format(asset))
+    return os.path.join(path, '{}_{}_classification.csv'.format(asset, label_name))
 
 
 def get_sequential_file_path(asset, is_production=False):
