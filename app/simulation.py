@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 from app.model import get_xgb_classification_params, get_xgb_regression_params, get_rnn_model, get_rnn_data, \
-    xgb_param_selection, get_model, get_model_file_path
+    xgb_param_selection, get_model, get_model_file_path, search_threshold
 from app.data import load_data, get_classification_data
 
 rnn_length = 20
@@ -110,13 +110,12 @@ def regression(asset, d, test_size):
 def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], label_index=-1, is_production=False):
     fields = ['asset', 'label', 'label_index', 'n_train', 'n_train_pos', 'n_test', 'n_test_pos', 'model_name', 'train_loss',
               'feature_importance', 'auc', 'accuracy', 'precision', 'recall', 'f1', 'threshold']
-    default_threshold = 0.5
     # Data
     xs, ys, feature_names, label_name = get_classification_data(d, label_index)
     train_xs, test_xs, train_ys, test_ys = train_test_split(xs, ys, shuffle=False, test_size=test_size)
     n_train_pos, n_train, n_test_pos, n_test = sum(train_ys), len(train_ys), sum(test_ys), len(test_ys)
     attributes = {'asset': asset, 'label': label_name, 'label_index': label_index, 'n_train': n_train, 'n_train_pos': n_train_pos,
-                  'n_test': n_test, 'n_test_pos': n_test_pos, 'threshold': default_threshold}
+                  'n_test': n_test, 'n_test_pos': n_test_pos}
 
     # Model
     results = []
@@ -127,13 +126,14 @@ def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], l
         models.append(model)
         status = model.train(train_xs, train_ys)
         feature_importance = model.get_feature_importance()
-        performance = model.test(test_xs, test_ys, default_threshold)
+        threshold = search_threshold(train_xs, train_ys, model)
+        performance = model.test(test_xs, test_ys, threshold)
         aucs.append(performance['auc'])
 
         result = copy.deepcopy(attributes)
         result.update(performance)
         result.update(status)
-        result.update({'feature_importance': feature_importance, 'model_name': model_name})
+        result.update({'feature_importance': feature_importance, 'model_name': model_name, 'threshold': threshold})
         results.append(result)
     report = pd.DataFrame(results, columns=fields)
     report.to_csv(get_classification_file_path(asset, label_name, is_production), index=False)
@@ -149,6 +149,8 @@ def classification(asset, d, test_size=200, model_names=['gbdt', 'lr', 'rnn'], l
         model.save_pr_curve(asset, label_name, test_xs, test_ys)
         best_performance['model_path'] = model_path
     return best_performance
+
+
 
 
 def sequential(asset, d, test_size=200):

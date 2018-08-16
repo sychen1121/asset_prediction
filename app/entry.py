@@ -51,7 +51,7 @@ def generate_prediction(selection):
     scores, predictions = model.predict(xs, threshold)
     result = load_prediction_result(asset, label_name)
     new_result = pd.DataFrame([[data.index[-1], scores[-1], predictions[-1]]], columns=['date', 'score', 'prediction'])
-    save_prediction_result(asset, result, new_result)
+    save_prediction_result(asset, label_name, result, new_result)
     return
 
 
@@ -75,12 +75,12 @@ def load_selection_result():
         return None
 
 
-def save_prediction_result(asset, d1, d2):
+def save_prediction_result(asset, label_name, d1, d2):
     if d1 is None:
         d1 = d2
     else:
         d1 = pd.concat([d1, d2])
-    d1.to_csv(get_prediction_file_path(asset), index=False)
+    d1.to_csv(get_prediction_file_path(asset, label_name), index=False)
 
 
 def load_prediction_result(asset, label_name):

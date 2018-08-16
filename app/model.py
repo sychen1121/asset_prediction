@@ -27,6 +27,20 @@ def get_model(model_name, target='classification', feature_names=[]):
         return LRModel(model_name, target, feature_names)
 
 
+def search_threshold(xs, ys, model):
+    best_accuracy = 0
+    best_threshold = 0
+    for i in range(1, 10):
+        threshold = i / 10.0
+        accuracy = model.test(xs, ys, threshold)['accuracy']
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_threshold = threshold
+    print('best training accuracy {}, threshold {}'.format(best_accuracy, best_threshold))
+    return best_threshold
+
+
+
 class Model(object):
     def __init__(self, model_name, target='classification', feature_names=None):
         self.name = model_name
